@@ -2,30 +2,47 @@
 
 import bpy
 
-# Set the frame step (e.g., 2 for every second frame, 3 for every third frame)
-frame_step = 7  # Change to 3 if you want to remove every third frame
+# Step rate — keep every nth keyframe
+frame_step = 4
 
-# Get the active object
+# Root bone name
+root_bone_name = "root"
+
+# Get active object
 obj = bpy.context.object
 
-# Ensure the object has animation data
 if obj and obj.animation_data and obj.animation_data.action:
     action = obj.animation_data.action
+
     for fcurve in action.fcurves:
-        # Get all keyframe points
+        data_path = fcurve.data_path
+
+        preserve = False
+
+        # Case 1: Object-level transforms (root motion applied here)
+        if data_path in {"location", "rotation_euler", "rotation_quaternion", "scale"}:
+            preserve = True
+
+        # Case 2: Pose bone fcurves — preserve only the "root" bone
+        elif data_path.startswith('pose.bones["'):
+            start = data_path.find('["') + 2
+            end = data_path.find('"]')
+            bone_name = data_path[start:end]
+
+            if bone_name == root_bone_name:
+                preserve = True
+
+        # Skip keyframe removal for preserved F-curves
+        if preserve:
+            continue
+
+        # Decimate keyframes
         keyframe_points = fcurve.keyframe_points
-        
-        # Collect indices of keyframes to remove
-        indices_to_remove = []
-        for i, keyframe in enumerate(keyframe_points):
-            if i % frame_step == 0:  # Keep every nth frame
-                continue
-            indices_to_remove.append(i)
-        
-        # Remove keyframes in reverse order to avoid index shifting
+        indices_to_remove = [i for i in range(len(keyframe_points)) if i % frame_step != 0]
+
         for index in reversed(indices_to_remove):
             keyframe_points.remove(keyframe_points[index])
-    
-    print("Keyframes decimated successfully.")
+
+    print(f"Keyframes decimated. Object transforms and '{root_bone_name}' bone preserved.")
 else:
     print("No animation data found on the active object.")
